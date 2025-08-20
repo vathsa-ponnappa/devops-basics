@@ -1,0 +1,2 @@
+line1:initial content
+line2:new feature added
