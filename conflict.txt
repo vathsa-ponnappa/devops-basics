@@ -1,1 +1,5 @@
+ HEAD
 line from main
+
+line from confilct-demp
+ conflict-demo
