@@ -1,13 +1,10 @@
-name: Advanced CI Demo
+name: CI Pipeline with Tests
 
 on:
   push:
-    branches:
-      - main
-      - ci-advanced
+    branches: [ main, ci-advanced ]
   pull_request:
-    branches:
-      - main
+    branches: [ main ]
 
 jobs:
   build:
@@ -15,9 +12,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-
-      - name: Run build
-        run: echo "Building the project..."
+      - name: Build step
+        run: echo "Build successful"
 
   test:
     runs-on: ubuntu-latest
@@ -26,16 +22,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: pip install pytest
+
       - name: Run tests
-        run: echo "Running tests..."
-
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Lint code
-        run: echo "Linting completed successfully!"
-
-
+        run: pytest app/test_main.py
