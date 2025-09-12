@@ -1,4 +1,4 @@
-from main import add, sub
+from app.main import add, sub
 
 
 def test_addition():
