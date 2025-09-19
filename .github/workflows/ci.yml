@@ -1,10 +1,10 @@
-name: CI Pipeline
+name: CI Pipeline with Coverage
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
   pull_request:
-    branches: [ main ]
 
 jobs:
   build:
@@ -14,29 +14,27 @@ jobs:
         python-version: [3.9, 3.11]
 
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-          cache: pip   # Cache pip dependencies for faster builds
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirments.txt || true
-          pip install pytest pytest-cov flake8
+          pip install pytest pytest-cov codecov
 
-      - name: Run lint (flake8)
-        run: flake8 app/ test/
+      - name: Run tests with coverage
+        run: |
+          pytest --cov=app --cov-report=xml
 
-      - name: Run tests with pytest
-        run: pytest --junitxml=report.xml
-
-      - name: Upload test report
-        uses: actions/upload-artifact@v4
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
         with:
-          name: test-report-${{ matrix.python-version }}
-          path: report.xml
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.xml
+          fail_ci_if_error: true
+
