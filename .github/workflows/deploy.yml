@@ -1,0 +1,48 @@
+name: Deploy App to Production
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    name: Build, Test & Deploy
+
+    steps:
+      - name: 🛎️ Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Set up Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: 📦 Install Dependencies
+        run: npm install
+
+      - name: 🧪 Run Tests
+        run: npm test
+
+      - name: 🏗️ Build Application
+        run: npm run build
+
+      - name: 📂 List Output Files
+        run: ls -R
+
+      - name: 🚀 Deploy to Server
+        if: github.ref == 'refs/heads/main'
+        env:
+          SERVER_IP: ${{ secrets.SERVER_IP }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+        run: |
+          echo "Starting deployment to $SERVER_IP..."
+          echo "$SSH_KEY" > key.pem
+          chmod 600 key.pem
+          scp -i key.pem -r ./build/* $SSH_USER@$SERVER_IP:/var/www/html/
+          echo "✅ Deployment successful!"
