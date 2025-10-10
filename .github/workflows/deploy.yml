@@ -1,4 +1,4 @@
-name: Deploy Application
+name: Python CI/CD Workflow
 
 on:
   push:
@@ -9,33 +9,32 @@ on:
       - main
 
 jobs:
-  build-deploy:
+  build-test-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 🛎️ Checkout Repository
+      - name: 🧭 Checkout Repository
         uses: actions/checkout@v4
 
-      - name: 🧭 Navigate to App Directory
-        working-directory: ./app
-        run: ls -R
-
-      - name: ⚙️ Set up Node.js
-        uses: actions/setup-node@v4
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
         with:
-          node-version: '18'
+          python-version: "3.10"
 
       - name: 📦 Install Dependencies
-        working-directory: ./app
-        run: npm install
+        run: |
+          python -m venv venv
+          source venv/bin/activate
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          else
+            echo "⚠️ No requirements.txt found, skipping dependency installation."
+          fi
 
       - name: 🧪 Run Tests
-        working-directory: ./app
-        run: npm test || echo "No tests found, skipping."
-
-      - name: 🏗️ Build Application
-        working-directory: ./app
-        run: npm run build || echo "No build command found, skipping."
+        run: |
+          source venv/bin/activate
+          python -m unittest discover -s app -p "test_*.py"
 
       - name: 🚀 Deploy to Server
         if: github.ref == 'refs/heads/main'
@@ -46,5 +45,6 @@ jobs:
         run: |
           echo "$SSH_KEY" > key.pem
           chmod 600 key.pem
-          scp -i key.pem -r ./app/build/* $SSH_USER@$SERVER_IP:/var/www/html/
+          echo "🚀 Deploying Python app to $SERVER_IP..."
+          scp -i key.pem -r ./app/* $SSH_USER@$SERVER_IP:/var/www/html/
           echo "✅ Deployment complete!"
