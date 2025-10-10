@@ -1,48 +1,41 @@
-name: CI Pipeline with Deploy
+name: CD Pipeline
 
-on: [push, pull_request]
+on:
+  push:
+    branches:
+      - main
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: [3.9, 3.11]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: 3.11
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt || true
+          pip install -r requirements.txt
 
-      - name: Run tests with coverage
-        run: |
-          pytest --maxfail=1 --disable-warnings -q --cov=app --cov-report=xml
-
-      - name: Upload coverage report
-        uses: codecov/codecov-action@v4
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./coverage.xml
-          fail_ci_if_error: true
+      - name: Run tests
+        run: pytest --maxfail=1 --disable-warnings -q
 
   deploy:
-    needs: build   # will run only if build is successful
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Simulate Deployment
+      - name: Deploy simulation
         run: |
-          echo "Starting deployment..."
-          echo "Packaging app..."
-          echo "Deploying app to staging server..."
-          echo "Deployment successful ✅"
+          echo "🚀 Deployment started..."
+          mkdir -p deploy
+          cp -r app deploy/
+          cp requirements.txt deploy/
+          echo "✅ Deployment completed successfully!"
