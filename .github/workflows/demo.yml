@@ -1,0 +1,17 @@
+name: Demo Workflow
+
+on:
+  push:
+    branches:
+      - main
+      - feature/demo-workflow
+
+jobs:
+  say-hello:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Print Hello Message
+        run: echo "👋 Hello from GitHub Actions! Workflow is working perfectly."
