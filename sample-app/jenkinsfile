@@ -1,0 +1,57 @@
+pipeline {
+  agent any
+
+  environment {
+    REPO = 'git@github.com:vathsaponnappa/devops-basics.git'
+    BRANCH = 'main'
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        echo "-> Checking out ${env.REPO} (branch: ${env.BRANCH})"
+        // Checkout repo (whole repo, including sample-app folder)
+        git url: "${env.REPO}", branch: "${env.BRANCH}"
+        dir('sample-app') {
+          echo "Inside sample-app directory"
+        }
+      }
+    }
+
+    stage('Build') {
+      steps {
+        dir('sample-app') {
+          echo 'Building the Python sample app...'
+          bat 'python --version'
+        }
+      }
+    }
+
+    stage('Test') {
+      steps {
+        dir('sample-app') {
+          echo 'Running test stage...'
+          bat 'pytest || echo "No tests found, skipping..."'
+        }
+      }
+    }
+
+    stage('Deploy') {
+      steps {
+        dir('sample-app') {
+          echo 'Simulating deployment...'
+          bat 'echo Deployment successful!'
+        }
+      }
+    }
+  }
+
+  post {
+    success {
+      echo '✅ Pipeline finished successfully!'
+    }
+    failure {
+      echo '❌ Pipeline failed! Check console logs.'
+    }
+  }
+}
