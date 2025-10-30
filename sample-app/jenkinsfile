@@ -2,7 +2,7 @@ pipeline {
   agent any
 
   environment {
-    REPO = 'git@github.com:vathsaponnappa/devops-basics.git'
+    REPO = 'git@github.com:vathsa-ponnappa/devops-basics.git'
     BRANCH = 'main'
   }
 
