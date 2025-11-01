@@ -33,7 +33,7 @@ pipeline {
               '''
             } else {
               bat '''
-              where python >nul 2>&1 && (python --version) || (where py >nul 2>&1 && py -3 --version || (echo Python not found on PATH. Skipping build and tests. & exit /b 0))
+                where python >nul 2>&1 && (python --version) || (where py >nul 2>&1 && py -3 --version) || (echo Python not found on PATH. Skipping build and tests. & exit /b 0)
               '''
             }
           }
@@ -48,9 +48,13 @@ pipeline {
           script {
             if (isUnix()) {
               sh '''
+                # detect python
                 if command -v python >/dev/null 2>&1; then PY=python
                 elif command -v python3 >/dev/null 2>&1; then PY=python3
-                else echo "No python found, skipping tests"; exit 0; fi
+                else
+                  echo "No python found, skipping tests"
+                  exit 0
+                fi
 
                 $PY --version
                 $PY -m pip install --upgrade pip || true
@@ -66,41 +70,44 @@ pipeline {
                 fi
               '''
             } else {
-              // Safer Windows batch: avoid nested if/else parsing issues
+              // Windows - linear, safe flow
               bat '''
-              :: Try python first
-              where python >nul 2>&1 && (
-                python -m pip install --upgrade pip
-                python -m pip install -r requirements.txt || echo "pip install returned non-zero"
-                python -m pytest
-              ) || (
-                :: fallback to py launcher
-                where py >nul 2>&1 && (
-                  py -3 -m pip install --upgrade pip
-                  py -3 -m pip install -r requirements.txt || echo "pip install returned non-zero"
-                  py -3 -m pytest
-                ) || (
-                  echo "No python launcher found, skipping tests"
+                REM Try 'python' first, fallback to 'py -3'
+                where python >nul 2>&1
+                if %ERRORLEVEL% EQU 0 (
+                  python -m pip install --upgrade pip
+                  python -m pip install -r requirements.txt || echo pip install returned non-zero
+                  python -m pytest
+                ) else (
+                  where py >nul 2>&1
+                  if %ERRORLEVEL% EQU 0 (
+                    py -3 -m pip install --upgrade pip
+                    py -3 -m pip install -r requirements.txt || echo pip install returned non-zero
+                    py -3 -m pytest
+                  ) else (
+                    echo No python launcher found, skipping tests
+                    REM ensure ERRORLEVEL = 0
+                    exit /b 0
+                  )
                 )
-              )
 
-              :: capture errorlevel and normalize
-              set rc=%ERRORLEVEL%
-              if "%rc%"=="" set rc=0
+                REM capture final ERRORLEVEL
+                set rc=%ERRORLEVEL%
+                if "%rc%"=="" set rc=0
 
-              :: if no tests collected (pytest exit code 5) -> success
-              if %rc% EQU 5 (
-                echo No tests collected (pytest exit code 5). Treating as success.
-                exit /b 0
-              )
+                REM if no tests collected (pytest exit code 5) -> treat as success
+                if %rc% EQU 5 (
+                  echo No tests collected (pytest exit code 5). Treating as success.
+                  exit /b 0
+                )
 
-              :: if other non-zero -> fail with that code
-              if %rc% NEQ 0 (
-                echo pytest failed with exit code %rc%.
-                exit /b %rc%
-              )
+                REM if other non-zero -> fail
+                if %rc% NEQ 0 (
+                  echo pytest failed with exit code %rc%.
+                  exit /b %rc%
+                )
 
-              :: otherwise continue (rc==0)
+                REM otherwise continue
               '''
             }
           }
