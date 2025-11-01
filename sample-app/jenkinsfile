@@ -66,40 +66,41 @@ pipeline {
                 fi
               '''
             } else {
+              // Safer Windows batch: avoid nested if/else parsing issues
               bat '''
               :: Try python first
               where python >nul 2>&1 && (
                 python -m pip install --upgrade pip
                 python -m pip install -r requirements.txt || echo "pip install returned non-zero"
                 python -m pytest
-                set rc=%ERRORLEVEL%
-                if "%rc%"=="" set rc=0
-                if %rc%==5 (
-                  echo No tests collected (pytest exit code 5). Treating as success.
-                  exit /b 0
-                ) else if %rc% NEQ 0 (
-                  echo pytest failed with exit code %rc%.
-                  exit /b %rc%
-                )
               ) || (
-                :: Fallback to py launcher
+                :: fallback to py launcher
                 where py >nul 2>&1 && (
                   py -3 -m pip install --upgrade pip
                   py -3 -m pip install -r requirements.txt || echo "pip install returned non-zero"
                   py -3 -m pytest
-                  set rc=%ERRORLEVEL%
-                  if "%rc%"=="" set rc=0
-                  if %rc%==5 (
-                    echo No tests collected (pytest exit code 5). Treating as success.
-                    exit /b 0
-                  ) else if %rc% NEQ 0 (
-                    echo pytest failed with exit code %rc%.
-                    exit /b %rc%
-                  )
                 ) || (
                   echo "No python launcher found, skipping tests"
                 )
               )
+
+              :: capture errorlevel and normalize
+              set rc=%ERRORLEVEL%
+              if "%rc%"=="" set rc=0
+
+              :: if no tests collected (pytest exit code 5) -> success
+              if %rc% EQU 5 (
+                echo No tests collected (pytest exit code 5). Treating as success.
+                exit /b 0
+              )
+
+              :: if other non-zero -> fail with that code
+              if %rc% NEQ 0 (
+                echo pytest failed with exit code %rc%.
+                exit /b %rc%
+              )
+
+              :: otherwise continue (rc==0)
               '''
             }
           }
@@ -112,12 +113,12 @@ pipeline {
       steps {
         dir('sample-app') {
           echo 'Simulating deployment...'
-          script { 
-            if (isUnix()) { 
-              sh 'echo "Deployment simulated: success"' 
-            } else { 
-              bat 'echo Deployment simulated: success' 
-            } 
+          script {
+            if (isUnix()) {
+              sh 'echo "Deployment simulated: success"'
+            } else {
+              bat 'echo Deployment simulated: success'
+            }
           }
         }
       }
