@@ -57,24 +57,45 @@ pipeline {
                 $PY -m pip install -r requirements.txt || echo "pip install returned non-zero"
                 $PY -m pytest || rc=$?
                 rc=${rc:-$?}
-                if [ "$rc" -eq 5 ]; then echo "No tests collected (pytest exit code 5). Treating as success."; exit 0
-                elif [ "$rc" -ne 0 ]; then echo "pytest failed with exit code $rc"; exit $rc; fi
+                if [ "$rc" -eq 5 ]; then
+                  echo "No tests collected (pytest exit code 5). Treating as success."
+                  exit 0
+                elif [ "$rc" -ne 0 ]; then
+                  echo "pytest failed with exit code $rc"
+                  exit $rc
+                fi
               '''
             } else {
               bat '''
+              :: Try python first
               where python >nul 2>&1 && (
                 python -m pip install --upgrade pip
                 python -m pip install -r requirements.txt || echo "pip install returned non-zero"
                 python -m pytest
                 set rc=%ERRORLEVEL%
-                if %rc%==5 (echo No tests collected (pytest exit code 5). Treating as success. & exit /b 0) else if %rc% NEQ 0 (echo pytest failed with exit code %rc%. & exit /b %rc%)
+                if "%rc%"=="" set rc=0
+                if %rc%==5 (
+                  echo No tests collected (pytest exit code 5). Treating as success.
+                  exit /b 0
+                ) else if %rc% NEQ 0 (
+                  echo pytest failed with exit code %rc%.
+                  exit /b %rc%
+                )
               ) || (
+                :: Fallback to py launcher
                 where py >nul 2>&1 && (
                   py -3 -m pip install --upgrade pip
                   py -3 -m pip install -r requirements.txt || echo "pip install returned non-zero"
                   py -3 -m pytest
                   set rc=%ERRORLEVEL%
-                  if %rc%==5 (echo No tests collected (pytest exit code 5). Treating as success. & exit /b 0) else if %rc% NEQ 0 (echo pytest failed with exit code %rc%. & exit /b %rc%)
+                  if "%rc%"=="" set rc=0
+                  if %rc%==5 (
+                    echo No tests collected (pytest exit code 5). Treating as success.
+                    exit /b 0
+                  ) else if %rc% NEQ 0 (
+                    echo pytest failed with exit code %rc%.
+                    exit /b %rc%
+                  )
                 ) || (
                   echo "No python launcher found, skipping tests"
                 )
