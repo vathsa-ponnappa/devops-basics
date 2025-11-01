@@ -7,17 +7,11 @@ pipeline {
   }
 
   stages {
-
-    // Jenkins automatically does a Declarative: Checkout SCM (if Pipeline from SCM).
-    // We'll still perform a reproducible git checkout inside the pipeline to ensure correct workspace layout.
     stage('Checkout') {
       steps {
         echo "-> Checking out ${env.REPO_SSH} (branch: ${env.BRANCH})"
-        // Use SSH URL so Jenkins user/agent SSH keys will be used (you configured them)
         git url: "${env.REPO_SSH}", branch: "${env.BRANCH}"
-        dir('sample-app') {
-          echo "Inside sample-app directory"
-        }
+        dir('sample-app') { echo "Inside sample-app directory" }
       }
     }
 
@@ -38,129 +32,84 @@ pipeline {
                 fi
               '''
             } else {
-              // Windows (bat)
               bat '''
-              where python >nul 2>&1 && (
-                python --version
-              ) || (
-                where py >nul 2>&1 && py -3 --version || (
-                  echo Python not found on PATH. Skipping build and tests.
-                  exit /b 0
-                )
-              )
+              where python >nul 2>&1 && (python --version) || (where py >nul 2>&1 && py -3 --version || (echo Python not found on PATH. Skipping build and tests. & exit /b 0))
               '''
             }
-          } // script
-        } // dir
-      } // steps
-    } // stage Build
+          }
+        }
+      }
+    }
 
     stage('Test') {
       steps {
         dir('sample-app') {
           echo 'Running tests (if pytest installed)...'
-
           script {
             if (isUnix()) {
               sh '''
-                # choose python cmd
-                if command -v python >/dev/null 2>&1; then
-                  PY=python
-                elif command -v python3 >/dev/null 2>&1; then
-                  PY=python3
-                else
-                  echo "No python found, skipping tests"
-                  exit 0
-                fi
+                if command -v python >/dev/null 2>&1; then PY=python
+                elif command -v python3 >/dev/null 2>&1; then PY=python3
+                else echo "No python found, skipping tests"; exit 0; fi
 
                 $PY --version
                 $PY -m pip install --upgrade pip || true
                 $PY -m pip install -r requirements.txt || echo "pip install returned non-zero"
-                # run pytest; capture exit code
                 $PY -m pytest || rc=$?
                 rc=${rc:-$?}
-                if [ -z "$rc" ]; then rc=0; fi
-                # if no tests collected pytest exit code 5 -> treat as success
-                if [ "$rc" -eq 5 ]; then
-                  echo "No tests collected (pytest exit code 5). Treating as success."
-                  exit 0
-                elif [ "$rc" -ne 0 ]; then
-                  echo "pytest failed with exit code $rc"
-                  exit $rc
-                fi
+                if [ "$rc" -eq 5 ]; then echo "No tests collected (pytest exit code 5). Treating as success."; exit 0
+                elif [ "$rc" -ne 0 ]; then echo "pytest failed with exit code $rc"; exit $rc; fi
               '''
             } else {
-              // Windows bat: handle pytest exit code 5 as success
               bat '''
               where python >nul 2>&1 && (
                 python -m pip install --upgrade pip
                 python -m pip install -r requirements.txt || echo "pip install returned non-zero"
                 python -m pytest
                 set rc=%ERRORLEVEL%
-                if %rc%==5 (
-                  echo No tests collected (pytest exit code 5). Treating as success.
-                  exit /b 0
-                ) else if %rc% NEQ 0 (
-                  echo pytest failed with exit code %rc%.
-                  exit /b %rc%
-                )
+                if %rc%==5 (echo No tests collected (pytest exit code 5). Treating as success. & exit /b 0) else if %rc% NEQ 0 (echo pytest failed with exit code %rc%. & exit /b %rc%)
               ) || (
                 where py >nul 2>&1 && (
                   py -3 -m pip install --upgrade pip
                   py -3 -m pip install -r requirements.txt || echo "pip install returned non-zero"
                   py -3 -m pytest
                   set rc=%ERRORLEVEL%
-                  if %rc%==5 (
-                    echo No tests collected (pytest exit code 5). Treating as success.
-                    exit /b 0
-                  ) else if %rc% NEQ 0 (
-                    echo pytest failed with exit code %rc%.
-                    exit /b %rc%
-                  )
+                  if %rc%==5 (echo No tests collected (pytest exit code 5). Treating as success. & exit /b 0) else if %rc% NEQ 0 (echo pytest failed with exit code %rc%. & exit /b %rc%)
                 ) || (
                   echo "No python launcher found, skipping tests"
                 )
               )
               '''
             }
-          } // script
-        } // dir
-      } // steps
-    } // stage Test
-
-    stage('Deploy') {
-      when {
-        expression { currentBuild.result == null || currentBuild.result == 'SUCCESS' }
-      }
-      steps {
-        dir('sample-app') {
-          echo 'Simulating deployment...'
-          script {
-            if (isUnix()) {
-              sh 'echo "Deployment simulated: success"'
-            } else {
-              bat 'echo Deployment simulated: success'
-            }
           }
         }
       }
-    } // stage Deploy
+    }
 
-  } // stages
+    stage('Deploy') {
+      when { expression { currentBuild.result == null || currentBuild.result == 'SUCCESS' } }
+      steps {
+        dir('sample-app') {
+          echo 'Simulating deployment...'
+          script { 
+            if (isUnix()) { 
+              sh 'echo "Deployment simulated: success"' 
+            } else { 
+              bat 'echo Deployment simulated: success' 
+            } 
+          }
+        }
+      }
+    }
+  }
 
   post {
-    success {
-      echo '✅ Pipeline finished successfully!'
-    }
-    unstable {
-      echo '⚠️ Pipeline unstable (tests may have issues).'
-    }
-    failure {
-      echo '❌ Pipeline failed! Check console logs.'
-    }
+    success { echo '✅ Pipeline finished successfully!' }
+    unstable { echo '⚠️ Pipeline unstable (tests may have issues).' }
+    failure { echo '❌ Pipeline failed! Check console logs.' }
     always {
-      // Optionally archive artifacts or test reports here (example commented)
-      // archiveArtifacts artifacts: 'sample-app/build/**', allowEmptyArchive: true
+      archiveArtifacts artifacts: 'sample-app/**', allowEmptyArchive: true
+      echo '📦 Post actions completed (artifacts archived if present).'
     }
   }
 }
