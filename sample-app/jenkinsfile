@@ -66,50 +66,51 @@ pipeline {
                 fi
               '''
             } else {
-              // Windows: write a PowerShell script and execute it to avoid cmd quoting issues
-              bat '''
-                REM create a one-off PowerShell script to run tests reliably
-                type nul > run_tests.ps1
-                echo Try { >> run_tests.ps1
-                echo     $rc = 0 >> run_tests.ps1
-                echo     if (Get-Command python -ErrorAction SilentlyContinue) { >> run_tests.ps1
-                echo         Write-Output "Using python" >> run_tests.ps1
-                echo         python -m pip install --upgrade pip | Out-Null >> run_tests.ps1
-                echo         python -m pip install -r requirements.txt 2>&1 | Out-Null >> run_tests.ps1
-                echo         python -m pytest >> run_tests.ps1
-                echo         $rc = $LASTEXITCODE >> run_tests.ps1
-                echo     } elseif (Get-Command py -ErrorAction SilentlyContinue) { >> run_tests.ps1
-                echo         Write-Output "Using py -3" >> run_tests.ps1
-                echo         py -3 -m pip install --upgrade pip | Out-Null >> run_tests.ps1
-                echo         py -3 -m pip install -r requirements.txt 2>&1 | Out-Null >> run_tests.ps1
-                echo         py -3 -m pytest >> run_tests.ps1
-                echo         $rc = $LASTEXITCODE >> run_tests.ps1
-                echo     } else { >> run_tests.ps1
-                echo         Write-Output "No python launcher found, skipping tests" >> run_tests.ps1
-                echo         exit 0 >> run_tests.ps1
-                echo     } >> run_tests.ps1
-                echo     if ($rc -eq 5) { >> run_tests.ps1
-                echo         Write-Output "No tests collected (pytest exit code 5). Treating as success." >> run_tests.ps1
-                echo         exit 0 >> run_tests.ps1
-                echo     } elseif ($rc -ne 0) { >> run_tests.ps1
-                echo         Write-Error "pytest failed with exit code $rc" >> run_tests.ps1
-                echo         exit $rc >> run_tests.ps1
-                echo     } else { >> run_tests.ps1
-                echo         exit 0 >> run_tests.ps1
-                echo     } >> run_tests.ps1
-                echo } Catch { >> run_tests.ps1
-                echo     Write-Error $_.Exception.Message >> run_tests.ps1
-                echo     exit 1 >> run_tests.ps1
-                echo } >> run_tests.ps1
+              // Windows: create the PowerShell script using Jenkins writeFile to avoid cmd quoting problems
+              script {
+                def ps = """
+try {
+    \$rc = 0
+    if (Get-Command python -ErrorAction SilentlyContinue) {
+        Write-Output 'Using python'
+        python -m pip install --upgrade pip | Out-Null
+        python -m pip install -r requirements.txt 2>&1 | Out-Null
+        python -m pytest
+        \$rc = \$LASTEXITCODE
+    } elseif (Get-Command py -ErrorAction SilentlyContinue) {
+        Write-Output 'Using py -3'
+        py -3 -m pip install --upgrade pip | Out-Null
+        py -3 -m pip install -r requirements.txt 2>&1 | Out-Null
+        py -3 -m pytest
+        \$rc = \$LASTEXITCODE
+    } else {
+        Write-Output 'No python launcher found, skipping tests'
+        exit 0
+    }
 
-                REM run the PowerShell script
+    if (\$rc -eq 5) {
+        Write-Output 'No tests collected (pytest exit code 5). Treating as success.'
+        exit 0
+    } elseif (\$rc -ne 0) {
+        Write-Error \"pytest failed with exit code \$rc\"
+        exit \$rc
+    } else {
+        exit 0
+    }
+} catch {
+    Write-Error \$_.Exception.Message
+    exit 1
+}
+"""
+                // write the PowerShell script file into the workspace
+                writeFile file: 'run_tests.ps1', text: ps
+              }
+
+              // execute the script and capture result
+              bat '''
                 powershell -NoProfile -ExecutionPolicy Bypass -File run_tests.ps1
                 set rc=%ERRORLEVEL%
-
-                REM cleanup
-                del /F /Q run_tests.ps1 >nul 2>&1
-
-                REM propagate the result to Jenkins
+                del /F /Q run_tests.ps1 >nul 2>&1 || echo run_tests.ps1 cleanup ignored
                 if %rc% NEQ 0 ( exit /b %rc% ) else ( exit /b 0 )
               '''
             }
