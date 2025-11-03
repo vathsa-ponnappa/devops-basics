@@ -1,0 +1,58 @@
+pipeline {
+  agent any
+
+  environment {
+    IMAGE = "vathsaponnappa/devops-pipeline-clean"
+    CONTAINER = "devops-pipeline-clean"
+  }
+
+  stages {
+
+    stage('Clone Repository') {
+      steps {
+        echo "📦 Cloning devops-basics repo..."
+        git branch: 'main', url: 'https://github.com/vathsa-ponnappa/devops-basics.git'
+      }
+    }
+
+    stage('Build Docker Image in WSL') {
+      steps {
+        echo "🐳 Building Docker image..."
+        bat '''
+        wsl -d Ubuntu -- bash -lc "
+          cd /home/vathsaponnappa/devops-basics/devops-pipeline-clean &&
+          docker build -t vathsaponnappa/devops-pipeline-clean .
+        "
+        '''
+      }
+    }
+
+    stage('Run Docker Container in WSL') {
+      steps {
+        echo "🚀 Running Flask container..."
+        bat '''
+        wsl -d Ubuntu -- bash -lc "
+          docker stop devops-pipeline-clean || true &&
+          docker rm devops-pipeline-clean || true &&
+          docker run -d -p 5000:5000 --name devops-pipeline-clean vathsaponnappa/devops-pipeline-clean
+        "
+        '''
+      }
+    }
+
+    stage('Verify Container') {
+      steps {
+        bat 'wsl -d Ubuntu -- bash -lc "docker ps"'
+      }
+    }
+  }
+
+  post {
+    success {
+      echo "✅ Build Successful! App is live at http://localhost:5000"
+    }
+    failure {
+      echo "❌ Build Failed. Check console logs."
+    }
+  }
+}
