@@ -34,18 +34,20 @@ pipeline {
         }
 
         stage('Build Docker Image in WSL') {
-            steps {
-                echo "🐳 Building Docker image: ${DOCKERHUB_USER}/${IMAGE_NAME}:${BUILD_VERSION}"
-                bat '''
-                    wsl -d Ubuntu -- bash -lc "
-                    cd /home/vathsaponnappa/devops-basics/devops-pipeline-trigger &&
-                    docker build --progress=plain \
-                        -t ${DOCKERHUB_USER}/${IMAGE_NAME}:${BUILD_VERSION} \
-                        -t ${DOCKERHUB_USER}/${IMAGE_NAME}:latest .
-                    "
-                '''
-            }
-        }
+             steps {
+                 echo "🐳 Building Docker image: ${DOCKERHUB_USER}/${IMAGE_NAME}:${BUILD_VERSION}"
+                 bat '''
+            	     wsl -d Ubuntu -- bash -lc '
+            	     cd /home/vathsaponnappa/devops-basics/devops-pipeline-trigger &&
+                     docker build --progress=plain \
+                         -t vathsalingeriponnappa/devops-pipeline-trigger:${BUILD_VERSION} \
+                         -t vathsalingeriponnappa/devops-pipeline-trigger:latest .
+                     '
+                 '''
+             }  
+         }
+
+
 
         stage('Run Docker Container') {
             steps {
