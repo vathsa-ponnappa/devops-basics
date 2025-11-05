@@ -1,76 +1,111 @@
 pipeline {
-  agent any
+    agent any
 
-  environment {
-    DOCKER_USER = "vathsalingeriponnappa"
-    IMAGE_NAME  = "devops-pipeline-trigger"
-    BUILD_VERSION = "v${BUILD_NUMBER}"
-  }
-
-  triggers {
-    githubPush()  // 🔥 This enables automatic builds when you push to GitHub
-  }
-
-  stages {
-    stage('Clone Repository') {
-      steps {
-        echo "📦 Pulling latest code..."
-        deleteDir()
-        git url: 'https://github.com/vathsa-ponnappa/devops-basics.git', branch: 'main'
-      }
+    environment {
+        REPO_URL = 'https://github.com/vathsa-ponnappa/devops-basics.git'
+        APP_DIR = 'devops-pipeline-trigger'
+        IMAGE_NAME = 'devops-pipeline-trigger'
+        DOCKERHUB_USER = 'vathsalingeriponnappa'
     }
 
-    stage('Build Docker Image') {
-      steps {
-        echo "🐳 Building image..."
-        bat """
-        wsl -d Ubuntu -- bash -c "cd /home/vathsaponnappa/devops-basics/devops-pipeline-trigger && \
-        docker build -t ${DOCKER_USER}/${IMAGE_NAME}:${BUILD_VERSION} -t ${DOCKER_USER}/${IMAGE_NAME}:latest ."
-        """
-      }
+    triggers {
+        githubPush() // Auto-trigger on GitHub push
     }
 
-    stage('Push to Docker Hub') {
-      steps {
-        echo "📤 Pushing to Docker Hub..."
-        withCredentials([usernamePassword(credentialsId: 'dockerhub', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-          bat """
-          wsl -d Ubuntu -- bash -lc "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin && \
-          docker push ${DOCKER_USER}/${IMAGE_NAME}:${BUILD_VERSION} && \
-          docker push ${DOCKER_USER}/${IMAGE_NAME}:latest"
-          """
+    stages {
+
+        stage('Clone Repository') {
+            steps {
+                echo '📦 Cloning latest from GitHub...'
+                deleteDir()
+                git branch: 'main', url: "${REPO_URL}"
+                bat 'git log -1 --pretty=format:"✅ Building commit: %h - %s"'
+            }
         }
-      }
-    }
-stage('Push to Docker Hub') {
-  steps {
-    echo "📤 Pushing ${BUILD_VERSION} to Docker Hub..."
-    withCredentials([usernamePassword(credentialsId: 'dockerhub', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-      // Use a triple-single-quoted bat script so Groovy does NOT interpolate $DOCKER_PASS.
-      // Inside we rely on Windows CMD to expand %DOCKER_PASS% and pass it into WSL.
-      bat '''
-        wsl -d Ubuntu -- bash -lc "echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin && \
-        docker push %DOCKER_USER%/''' + "${IMAGE_NAME}" + ''':${BUILD_VERSION} && \
-        docker push %DOCKER_USER%/''' + "${IMAGE_NAME}" + ''':latest"
-      '''
-    }
-  }
-}
 
-    stage('Verify Deployment') {
-      steps {
-        echo "🧠 Checking running containers..."
-        bat 'wsl -d Ubuntu -- bash -c "docker ps"'
-      }
-    }
-  }
+        stage('Set Version') {
+            steps {
+                script {
+                    // Auto-increment build version
+                    BUILD_VERSION = "v${env.BUILD_NUMBER}"
+                    echo "🚀 Build Version: ${BUILD_VERSION}"
+                }
+            }
+        }
 
-  post {
-    success {
-      echo "✅ Trigger Build Successful — ${BUILD_VERSION} pushed to Docker Hub!"
+        stage('Build Docker Image in WSL') {
+            steps {
+                echo "🐳 Building Docker image: ${DOCKERHUB_USER}/${IMAGE_NAME}:${BUILD_VERSION}"
+                bat '''
+                    wsl -d Ubuntu -- bash -lc "
+                    cd /home/vathsaponnappa/devops-basics/devops-pipeline-trigger &&
+                    docker build --progress=plain \
+                        -t ${DOCKERHUB_USER}/${IMAGE_NAME}:${BUILD_VERSION} \
+                        -t ${DOCKERHUB_USER}/${IMAGE_NAME}:latest .
+                    "
+                '''
+            }
+        }
+
+        stage('Run Docker Container') {
+            steps {
+                echo "🚀 Running Flask container..."
+                bat '''
+                    wsl -d Ubuntu -- bash -lc "
+                    docker stop devops-pipeline-trigger || true &&
+                    docker rm devops-pipeline-trigger || true &&
+                    docker run -d -p 5000:5000 --name devops-pipeline-trigger \
+                    ${DOCKERHUB_USER}/${IMAGE_NAME}:${BUILD_VERSION}
+                    "
+                '''
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                echo "📤 Pushing ${BUILD_VERSION} to Docker Hub..."
+                withCredentials([usernamePassword(credentialsId: 'dockerhub',
+                                                 usernameVariable: 'DOCKER_USER',
+                                                 passwordVariable: 'DOCKER_PASS')]) {
+                    // Safe version (no Groovy interpolation)
+                    bat '''
+                        wsl -d Ubuntu -- bash -lc '
+                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin &&
+                        docker push "$DOCKER_USER"/devops-pipeline-trigger:"${BUILD_VERSION}" &&
+                        docker push "$DOCKER_USER"/devops-pipeline-trigger:latest
+                        '
+                    '''
+                }
+            }
+        }
+
+        stage('Cleanup Old Images') {
+            steps {
+                echo '🧹 Cleaning up unused Docker images...'
+                bat '''
+                    wsl -d Ubuntu -- bash -lc "docker image prune -f"
+                '''
+            }
+        }
+
+        stage('Verify Deployment') {
+            steps {
+                echo '🧠 Checking running containers...'
+                bat '''
+                    wsl -d Ubuntu -- bash -lc "docker ps"
+                '''
+            }
+        }
     }
-    failure {
-      echo "❌ Trigger Build Failed — check logs."
+
+    post {
+        success {
+            echo "✅ Build ${BUILD_VERSION} succeeded!"
+            echo "📦 Image pushed to Docker Hub: ${DOCKERHUB_USER}/${IMAGE_NAME}:${BUILD_VERSION}"
+            echo "🌐 Access Flask app: http://localhost:5000"
+        }
+        failure {
+            echo "❌ Build ${BUILD_VERSION} failed. Check logs in Jenkins."
+        }
     }
-  }
 }
