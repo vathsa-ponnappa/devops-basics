@@ -9,7 +9,7 @@ pipeline {
     }
 
     triggers {
-        githubPush() // Auto-trigger on GitHub push
+        githubPush()  // Automatically build on push
     }
 
     stages {
@@ -26,56 +26,50 @@ pipeline {
         stage('Set Version') {
             steps {
                 script {
-                    // Auto-increment build version
-                    BUILD_VERSION = "v${env.BUILD_NUMBER}"
-                    echo "🚀 Build Version: ${BUILD_VERSION}"
+                    // Properly define the variable to avoid memory leak warning
+                    def buildNum = env.BUILD_NUMBER
+                    env.BUILD_VERSION = "v${buildNum}"
+                    echo "🚀 Build Version: ${env.BUILD_VERSION}"
                 }
             }
         }
 
         stage('Build Docker Image in WSL') {
-             steps {
-                 echo "🐳 Building Docker image: ${DOCKERHUB_USER}/${IMAGE_NAME}:${BUILD_VERSION}"
-                 bat '''
-            	     wsl -d Ubuntu -- bash -lc '
-            	     cd /home/vathsaponnappa/devops-basics/devops-pipeline-trigger &&
-                     docker build --progress=plain \
-                         -t vathsalingeriponnappa/devops-pipeline-trigger:${BUILD_VERSION} \
-                         -t vathsalingeriponnappa/devops-pipeline-trigger:latest .
-                     '
-                 '''
-             }  
-         }
+            steps {
+                echo "🐳 Building Docker image: ${DOCKERHUB_USER}/${IMAGE_NAME}:${env.BUILD_VERSION}"
 
-
+                // Use CMD’s caret escaping to safely pass to WSL Bash
+                bat '''
+                wsl -d Ubuntu bash -c "cd /home/vathsaponnappa/devops-basics/devops-pipeline-trigger && \
+                docker build --progress=plain -t vathsalingeriponnappa/devops-pipeline-trigger:%BUILD_VERSION% \
+                -t vathsalingeriponnappa/devops-pipeline-trigger:latest ."
+                '''
+            }
+        }
 
         stage('Run Docker Container') {
             steps {
                 echo "🚀 Running Flask container..."
                 bat '''
-                    wsl -d Ubuntu -- bash -lc "
-                    docker stop devops-pipeline-trigger || true &&
-                    docker rm devops-pipeline-trigger || true &&
-                    docker run -d -p 5000:5000 --name devops-pipeline-trigger \
-                    ${DOCKERHUB_USER}/${IMAGE_NAME}:${BUILD_VERSION}
-                    "
+                wsl -d Ubuntu bash -c "docker stop devops-pipeline-trigger || true && \
+                docker rm devops-pipeline-trigger || true && \
+                docker run -d -p 5000:5000 --name devops-pipeline-trigger \
+                vathsalingeriponnappa/devops-pipeline-trigger:%BUILD_VERSION%"
                 '''
             }
         }
 
         stage('Push to Docker Hub') {
             steps {
-                echo "📤 Pushing ${BUILD_VERSION} to Docker Hub..."
+                echo "📤 Pushing ${env.BUILD_VERSION} to Docker Hub..."
                 withCredentials([usernamePassword(credentialsId: 'dockerhub',
                                                  usernameVariable: 'DOCKER_USER',
                                                  passwordVariable: 'DOCKER_PASS')]) {
-                    // Safe version (no Groovy interpolation)
+                    // Safely login & push using CMD variable expansion (%VAR%)
                     bat '''
-                        wsl -d Ubuntu -- bash -lc '
-                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin &&
-                        docker push "$DOCKER_USER"/devops-pipeline-trigger:"${BUILD_VERSION}" &&
-                        docker push "$DOCKER_USER"/devops-pipeline-trigger:latest
-                        '
+                    wsl -d Ubuntu bash -c "echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin && \
+                    docker push %DOCKER_USER%/devops-pipeline-trigger:%BUILD_VERSION% && \
+                    docker push %DOCKER_USER%/devops-pipeline-trigger:latest"
                     '''
                 }
             }
@@ -84,30 +78,26 @@ pipeline {
         stage('Cleanup Old Images') {
             steps {
                 echo '🧹 Cleaning up unused Docker images...'
-                bat '''
-                    wsl -d Ubuntu -- bash -lc "docker image prune -f"
-                '''
+                bat 'wsl -d Ubuntu bash -c "docker image prune -f"'
             }
         }
 
         stage('Verify Deployment') {
             steps {
                 echo '🧠 Checking running containers...'
-                bat '''
-                    wsl -d Ubuntu -- bash -lc "docker ps"
-                '''
+                bat 'wsl -d Ubuntu bash -c "docker ps"'
             }
         }
     }
 
     post {
         success {
-            echo "✅ Build ${BUILD_VERSION} succeeded!"
-            echo "📦 Image pushed to Docker Hub: ${DOCKERHUB_USER}/${IMAGE_NAME}:${BUILD_VERSION}"
-            echo "🌐 Access Flask app: http://localhost:5000"
+            echo "✅ Build ${env.BUILD_VERSION} succeeded!"
+            echo "📦 Image pushed to Docker Hub: ${DOCKERHUB_USER}/${IMAGE_NAME}:${env.BUILD_VERSION}"
+            echo "🌐 Flask app running at: http://localhost:5000"
         }
         failure {
-            echo "❌ Build ${BUILD_VERSION} failed. Check logs in Jenkins."
+            echo "❌ Build ${env.BUILD_VERSION} failed. Check Jenkins logs."
         }
     }
 }
