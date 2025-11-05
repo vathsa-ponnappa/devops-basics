@@ -1,0 +1,62 @@
+pipeline {
+  agent any
+
+  environment {
+    DOCKER_USER = "vathsalingeriponnappa"
+    IMAGE_NAME  = "devops-pipeline-trigger"
+    BUILD_VERSION = "v${BUILD_NUMBER}"
+  }
+
+  triggers {
+    githubPush()  // 🔥 This enables automatic builds when you push to GitHub
+  }
+
+  stages {
+    stage('Clone Repository') {
+      steps {
+        echo "📦 Pulling latest code..."
+        deleteDir()
+        git url: 'https://github.com/vathsa-ponnappa/devops-basics.git', branch: 'main'
+      }
+    }
+
+    stage('Build Docker Image') {
+      steps {
+        echo "🐳 Building image..."
+        bat """
+        wsl -d Ubuntu -- bash -c "cd /home/vathsaponnappa/devops-basics/devops-pipeline-trigger && \
+        docker build -t ${DOCKER_USER}/${IMAGE_NAME}:${BUILD_VERSION} -t ${DOCKER_USER}/${IMAGE_NAME}:latest ."
+        """
+      }
+    }
+
+    stage('Push to Docker Hub') {
+      steps {
+        echo "📤 Pushing to Docker Hub..."
+        withCredentials([usernamePassword(credentialsId: 'dockerhub', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+          bat """
+          wsl -d Ubuntu -- bash -lc "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin && \
+          docker push ${DOCKER_USER}/${IMAGE_NAME}:${BUILD_VERSION} && \
+          docker push ${DOCKER_USER}/${IMAGE_NAME}:latest"
+          """
+        }
+      }
+    }
+
+    stage('Verify Deployment') {
+      steps {
+        echo "🧠 Checking running containers..."
+        bat 'wsl -d Ubuntu -- bash -c "docker ps"'
+      }
+    }
+  }
+
+  post {
+    success {
+      echo "✅ Trigger Build Successful — ${BUILD_VERSION} pushed to Docker Hub!"
+    }
+    failure {
+      echo "❌ Trigger Build Failed — check logs."
+    }
+  }
+}
