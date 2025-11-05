@@ -1,0 +1,85 @@
+pipeline {
+    agent any
+
+    environment {
+        DOCKER_USER = "vathsalingeriponnappa"
+        IMAGE_NAME = "devops-pipeline-clean"
+        BUILD_VERSION = "v${BUILD_NUMBER}"
+        IMAGE_TAG = "${DOCKER_USER}/${IMAGE_NAME}:${BUILD_VERSION}"
+    }
+
+    stages {
+
+        stage('Clone Repository') {
+            steps {
+                echo "📦 Cloning GitHub repo..."
+                git url: 'https://github.com/vathsa-ponnappa/devops-basics.git', branch: 'main'
+            }
+        }
+
+        stage('Build Docker Image in WSL') {
+            steps {
+                echo "🐳 Building Docker image version: ${BUILD_VERSION}"
+                bat '''
+                wsl -d Ubuntu -- bash -c "
+                    cd /home/vathsaponnappa/devops-basics/devops-pipeline-clean &&
+                    docker build --progress=plain -t ${IMAGE_TAG} -t ${DOCKER_USER}/${IMAGE_NAME}:latest .
+                "
+                '''
+            }
+        }
+
+        stage('Run Docker Container') {
+            steps {
+                echo "🚀 Running Flask container..."
+                bat '''
+                wsl -d Ubuntu -- bash -c "
+                    docker stop ${IMAGE_NAME} || true &&
+                    docker rm ${IMAGE_NAME} || true &&
+                    docker run -d -p 5000:5000 --name ${IMAGE_NAME} ${IMAGE_TAG}
+                "
+                '''
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                echo "📤 Pushing ${BUILD_VERSION} to Docker Hub..."
+                withCredentials([usernamePassword(credentialsId: 'dockerhub', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    bat '''
+                    wsl -d Ubuntu -- bash -c "
+                        echo ${DOCKER_PASS} | docker login -u ${DOCKER_USER} --password-stdin &&
+                        docker push ${IMAGE_TAG} &&
+                        docker push ${DOCKER_USER}/${IMAGE_NAME}:latest
+                    "
+                    '''
+                }
+            }
+        }
+
+        stage('Cleanup Old Images') {
+            steps {
+                echo "🧹 Cleaning up old Docker images..."
+                bat 'wsl -d Ubuntu -- bash -c "docker image prune -f"'
+            }
+        }
+
+        stage('Verify Deployment') {
+            steps {
+                echo "🧠 Checking running containers..."
+                bat 'wsl -d Ubuntu -- bash -c "docker ps"'
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Build ${BUILD_NUMBER} succeeded!"
+            echo "📦 Image pushed to Docker Hub: ${IMAGE_TAG}"
+            echo "🌐 Access your Flask app: http://localhost:5000"
+        }
+        failure {
+            echo "❌ Build ${BUILD_NUMBER} failed. Please check Jenkins logs."
+        }
+    }
+}
